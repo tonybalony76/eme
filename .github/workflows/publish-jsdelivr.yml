@@ -131,7 +131,8 @@ jobs:
             git clean -fdx
             mkdir -p cdn
             cp -a "$shard_dir/cdn/." cdn/
-            git add cdn/
+            if [[ "$shard" == "cdn-01" ]]; then cp fnf-launcher.js ./fnf-launcher.js; fi
+            git add cdn/ fnf-launcher.js
             git commit -m "Publish FNF CDN shard $shard"
             git push --force origin "HEAD:refs/heads/$shard"
             git checkout main
