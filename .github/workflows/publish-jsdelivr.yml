@@ -121,6 +121,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp fnf-launcher.js /tmp/fnf-launcher.js
 
           for shard_dir in /tmp/fnf-cdn/cdn-*; do
             shard="$(basename "$shard_dir")"
@@ -131,8 +132,12 @@ jobs:
             git clean -fdx
             mkdir -p cdn
             cp -a "$shard_dir/cdn/." cdn/
-            if [[ "$shard" == "cdn-01" ]]; then cp fnf-launcher.js ./fnf-launcher.js; fi
-            git add cdn/ fnf-launcher.js
+            if [[ "$shard" == "cdn-01" ]]; then
+              cp /tmp/fnf-launcher.js ./fnf-launcher.js
+              git add cdn/ fnf-launcher.js
+            else
+              git add cdn/
+            fi
             git commit -m "Publish FNF CDN shard $shard"
             git push --force origin "HEAD:refs/heads/$shard"
             git checkout main
