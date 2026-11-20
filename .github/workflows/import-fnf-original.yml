@@ -1,0 +1,62 @@
+name: Import original FNF HTML5 build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/import-fnf-original.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out the empty FNF hosting repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download only the HTML5 build from the source repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --filter=blob:none --sparse \
+            https://github.com/anime-kun32/Friday-Night-Funkin-html.git /tmp/fnf-source
+          git -C /tmp/fnf-source sparse-checkout set html5_build
+          test -f /tmp/fnf-source/html5_build/index.html
+          test -f /tmp/fnf-source/html5_build/Funkin.js
+          test -d /tmp/fnf-source/html5_build/assets
+          test -f /tmp/fnf-source/html5_build/LICENSE.md
+
+      - name: Copy the complete build without changing its asset paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$(find . -mindepth 1 -maxdepth 1 ! -name .git ! -name .github -print -quit)" ]; then
+            echo "Repository is not empty; refusing to overwrite existing files."
+            exit 1
+          fi
+          mkdir -p .
+          cp -a /tmp/fnf-source/html5_build/. .
+          test -f index.html
+          test -f Funkin.js
+          test -d assets
+          du -sh .
+
+      - name: Commit the original HTML5 build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "FNF files are already up to date."
+            exit 0
+          fi
+          git commit -m "Import original Friday Night Funkin HTML5 build"
+          git push
