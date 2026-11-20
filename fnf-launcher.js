@@ -2,7 +2,13 @@
   "use strict";
   const REPO = "tonybalony76/eme";
   const CDN_ROOT = "https://cdn.jsdelivr.net/gh/" + REPO;
-  const MANIFEST_URL = CDN_ROOT + "@cdn-01/cdn/manifest.json";
+  const SHARD_REFS = {"cdn-01":"62b36e5f6e485e73dab60425d2bb0b860e4c1658","cdn-02":"1158c8fe5544d74f45c817273e0c566965feb1a8","cdn-03":"d34f7be8a755127b32132823789c8cf591c9558f","cdn-04":"321d15dcebd6ae98792957d8855f5cdb02976786","cdn-05":"1da411737a01b5cfd74cc6231908ba27e98dc47e","cdn-06":"fb7b79bf1442c9ef0d0a0c8a4aa7f9c8d054c570","cdn-07":"95063c7ca1cc62e95b6e4d8d4ebe5f7814e9033f","cdn-08":"c741de351b5cdf6a06cc6a7317e929d8a9887f39","cdn-09":"a72d1145f0dbb791da095d8b03455161326da676","cdn-10":"49bbc96f069dbbfb560fa7d91821aed5d52b337b","cdn-11":"996c5c21af49c53e79b05599ccb79015836cc81d","cdn-12":"53515bfc16e990bb597b1b0a40c7124d987bffba","cdn-13":"5da6e66c36e86b46a86dae32518b442d51813cf8","cdn-14":"dc94a4310714751dec456311d5d91d1b6f397de5","cdn-15":"867426aeac4a45b26c1e1e85ddd04d82208bd11b","cdn-16":"5d46741fd18c2309ef643667b28a0297b641de30","cdn-17":"70176fb464d49e9d71dee9af56850b40c84f91ea","cdn-18":"1f42f3cd858d5155ac7c9f6fc1b07aeee3e1f9fb","cdn-19":"968ac27fdc63e9f796f7dc84941905313334c425","cdn-20":"a28efcee9838bdca23c118094f49fc6a14739fbd","cdn-21":"3fb5dcb2e044f58c4e2bc60ac7957f3ad26d576f","cdn-22":"ba6bbcaec50cd24e15ea488006f21a8f29cf4fe1"};
+  const MANIFEST_URL = CDN_ROOT + "@62b36e5f6e485e73dab60425d2bb0b860e4c1658/cdn/manifest.json";
+  function chunkUrl(chunk) {
+    const ref = SHARD_REFS[chunk.shard];
+    if (!ref) throw new Error("Unknown FNF CDN shard: " + chunk.shard);
+    return CDN_ROOT + "@" + ref + "/cdn/chunks/" + chunk.name;
+  }
   const FAKE_ORIGIN = "https://fnf.invalid/";
 
   async function readManifest() {
@@ -18,7 +24,7 @@
 
     async function getBytes(file) {
       const parts = await Promise.all(file.chunks.map(async chunk => {
-        const url = CDN_ROOT + "@" + chunk.shard + "/cdn/chunks/" + chunk.name;
+        const url = chunkUrl(chunk);
         const response = await fetch(url);
         if (!response.ok) throw new Error("Could not download " + chunk.name + " (" + response.status + ").");
         const bytes = new Uint8Array(await response.arrayBuffer());
