@@ -50,7 +50,7 @@ jobs:
 
           const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
             .split('\0')
-            .filter(p => p && !p.startsWith('.github/') && p !== '.gitignore');
+            .filter(p => p && !p.startsWith('.github/') && p !== '.gitignore' && p !== 'fnf-launcher.js');
 
           let shard = 1;
           let shardBytes = 0;
