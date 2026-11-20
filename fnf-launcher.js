@@ -57,7 +57,7 @@
     return { blobForPath };
   }
 
-  function bridge(manifest, CDN_ROOT) {
+  function bridge(manifest, CDN_ROOT, SHARD_REFS) {
     "use strict";
     const entries = new Map(manifest.files.map(file => [file.path.replace(/^\.?\//, ""), file]));
     const pending = new Map();
@@ -79,7 +79,9 @@
         pending.set(path, (async () => {
           const file = entries.get(path);
           const chunks = await Promise.all(file.chunks.map(async chunk => {
-            const url = CDN_ROOT + "@" + chunk.shard + "/cdn/chunks/" + chunk.name;
+            const ref = SHARD_REFS[chunk.shard];
+            if (!ref) throw new Error("Unknown FNF CDN shard: " + chunk.shard);
+            const url = CDN_ROOT + "@" + ref + "/cdn/chunks/" + chunk.name;
             const response = await window.__fnfNativeFetch(url);
             if (!response.ok) throw new Error("Chunk request failed: " + chunk.name + " (" + response.status + ")");
             const bytes = new Uint8Array(await response.arrayBuffer());
@@ -218,6 +220,7 @@
       const indexFile = await reader.blobForPath("index.html");
       const indexText = await (await fetch(indexFile.url)).text();
       const jsFile = await reader.blobForPath("Funkin.js");
+      const jsText = await (await fetch(jsFile.url)).text();
 
       const parsed = new DOMParser().parseFromString(indexText, "text/html");
       parsed.title = "Friday Night Funkin'";
@@ -257,12 +260,12 @@
 
       const gameScript = parsed.querySelector('script[src*="Funkin.js"]');
       if (!gameScript) throw new Error("The original index.html did not contain the expected Funkin.js script.");
-      gameScript.src = jsFile.url;
+      gameScript.removeAttribute("src");
+      gameScript.textContent = jsText;
 
-      const bridgeSource = "(" + bridge.toString() + ")(" + JSON.stringify(manifest) + "," + JSON.stringify(CDN_ROOT) + ");";
-      const bridgeBlob = new Blob([bridgeSource], { type: "text/javascript" });
+      const bridgeSource = "(" + bridge.toString() + ")(" + JSON.stringify(manifest) + "," + JSON.stringify(CDN_ROOT) + "," + JSON.stringify(SHARD_REFS) + ");";
       const bridgeScript = parsed.createElement("script");
-      bridgeScript.src = URL.createObjectURL(bridgeBlob);
+      bridgeScript.textContent = bridgeSource;
       gameScript.parentNode.insertBefore(bridgeScript, gameScript);
 
       gameWindow.document.open();
