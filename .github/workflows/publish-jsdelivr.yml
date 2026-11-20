@@ -1,0 +1,135 @@
+name: Publish FNF chunks to jsDelivr
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out the complete original FNF build
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Split files into jsDelivr-sized chunks and create the manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const crypto = require('crypto');
+          const { execFileSync } = require('child_process');
+
+          const chunkSize = 10 * 1024 * 1024;
+          const shardLimit = 110 * 1024 * 1024;
+          const out = '/tmp/fnf-cdn';
+          fs.rmSync(out, { recursive: true, force: true });
+          fs.mkdirSync(out, { recursive: true });
+
+          const mime = {
+            '.html':'text/html','.js':'text/javascript','.css':'text/css',
+            '.json':'application/json','.png':'image/png','.jpg':'image/jpeg',
+            '.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp',
+            '.svg':'image/svg+xml','.mp3':'audio/mpeg','.ogg':'audio/ogg',
+            '.wav':'audio/wav','.mp4':'video/mp4','.mkv':'video/x-matroska',
+            '.ttf':'font/ttf','.otf':'font/otf','.woff':'font/woff',
+            '.woff2':'font/woff2','.eot':'application/vnd.ms-fontobject',
+            '.xml':'application/xml','.txt':'text/plain'
+          };
+
+          const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
+            .split('\0')
+            .filter(p => p && !p.startsWith('.github/') && p !== '.gitignore');
+
+          let shard = 1;
+          let shardBytes = 0;
+          let chunkIndex = 0;
+          const shardNames = [];
+          const files = [];
+          const ensureShard = () => {
+            const name = 'cdn-' + String(shard).padStart(2, '0');
+            if (!shardNames.includes(name)) {
+              shardNames.push(name);
+              fs.mkdirSync(path.join(out, name, 'cdn', 'chunks'), { recursive: true });
+            }
+            return name;
+          };
+
+          for (const rel of tracked) {
+            const abs = path.resolve(rel);
+            if (!abs.startsWith(process.cwd() + path.sep) || !fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue;
+            const data = fs.readFileSync(abs);
+            const entry = {
+              path: rel.replaceAll('\\', '/'),
+              bytes: data.length,
+              mime: mime[path.extname(rel).toLowerCase()] || 'application/octet-stream',
+              sha256: crypto.createHash('sha256').update(data).digest('hex'),
+              chunks: []
+            };
+
+            for (let offset = 0; offset < data.length; offset += chunkSize) {
+              const part = data.subarray(offset, Math.min(offset + chunkSize, data.length));
+              if (shardBytes > 0 && shardBytes + part.length > shardLimit) {
+                shard++;
+                shardBytes = 0;
+              }
+              const shardName = ensureShard();
+              const chunkName = 'part-' + String(chunkIndex++).padStart(5, '0') + '.bin';
+              fs.writeFileSync(path.join(out, shardName, 'cdn', 'chunks', chunkName), part);
+              entry.chunks.push({ shard: shardName, name: chunkName, bytes: part.length });
+              shardBytes += part.length;
+            }
+            files.push(entry);
+          }
+
+          const manifest = {
+            format: 1,
+            chunkSize,
+            totalBytes: files.reduce((n, f) => n + f.bytes, 0),
+            fileCount: files.length,
+            shardCount: shardNames.length,
+            shards: shardNames,
+            files
+          };
+          const manifestText = JSON.stringify(manifest);
+          for (const name of shardNames) {
+            fs.writeFileSync(path.join(out, name, 'cdn', 'manifest.json'), manifestText);
+          }
+          fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify({
+            fileCount: files.length,
+            totalBytes: manifest.totalBytes,
+            chunkCount: chunkIndex,
+            shards: shardNames
+          }, null, 2));
+          console.log(fs.readFileSync(path.join(out, 'summary.json'), 'utf8'));
+          NODE
+
+      - name: Publish each CDN shard as a clean orphan branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for shard_dir in /tmp/fnf-cdn/cdn-*; do
+            shard="$(basename "$shard_dir")"
+            echo "Publishing $shard"
+            git branch -D "$shard" 2>/dev/null || true
+            git checkout --orphan "$shard"
+            git rm -rf . >/dev/null 2>&1 || true
+            git clean -fdx
+            mkdir -p cdn
+            cp -a "$shard_dir/cdn/." cdn/
+            git add cdn/
+            git commit -m "Publish FNF CDN shard $shard"
+            git push --force origin "HEAD:refs/heads/$shard"
+            git checkout main
+          done
+
+          echo "All CDN shard branches published."
