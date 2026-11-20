@@ -31,7 +31,8 @@ jobs:
           const { execFileSync } = require('child_process');
 
           const chunkSize = 10 * 1024 * 1024;
-          const shardLimit = 110 * 1024 * 1024;
+          // Keep each branch comfortably below jsDelivr's 50 MB package cap.
+          const shardLimit = 40 * 1024 * 1024;
           const out = '/tmp/fnf-cdn';
           fs.rmSync(out, { recursive: true, force: true });
           fs.mkdirSync(out, { recursive: true });
